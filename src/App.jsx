@@ -494,7 +494,7 @@ export default function App() {
   if (loading) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",gap:16}}>
       <style>{GF}</style>
-      <div style={{fontSize:48}}>📌</div>
+      <img src="/pin.svg" alt="Xapes" style={{width:72,height:72}}/>
       <p style={{fontFamily:"Fraunces",fontSize:24,color:T.accent}}>Xapes</p>
       <p style={{color:T.muted,fontSize:13}}>Carregant col·lecció…</p>
     </div>
@@ -509,7 +509,10 @@ export default function App() {
           <button onClick={goBack} style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:20,padding:"4px 6px",lineHeight:1}}>←</button>
         )}
         <span style={{fontFamily:"Fraunces",fontSize:21,color:T.accent,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-          {view==="home"?"Xapes 📌":view==="album"?album?.name:`${album?.name} · Fulla ${sheetIdx+1}`}
+          {view==="home"
+            ? <><img src="/pin.svg" alt="" style={{width:20,height:20,marginRight:6,verticalAlign:"middle"}}/>Xapes</>
+            : view==="album" ? album?.name
+            : `${album?.name} · Fulla ${sheetIdx+1}`}
         </span>
         {(view==="album"||view==="sheet")&&(
           <button onClick={()=>setSearchOpen(true)} title="Cerca" style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:17,padding:"4px 6px"}}>🔍</button>
