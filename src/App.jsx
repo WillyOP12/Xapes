@@ -88,7 +88,7 @@ async function describePin(imageUrl) {
     role: "user",
     content: [
       { type: "image_url", image_url: { url: imageUrl } },
-      { type: "text", text: "Descriu aquesta xapa/pin en 2 frases en català. Menciona la forma, els colors principals, qualsevol text o símbol, i l'estil." },
+      { type: "text", text: "Descriu aquesta xapa segons el text, icones, o símbols, colors o altres. No cal la forma. No facis suposicions." },
     ],
   }], 150);
 }
