@@ -309,8 +309,12 @@ function CameraCapture({ onCapture, onCancel }) {
     stopAllCameras(); if (!mountedRef.current) return;
     setReady(false); setErr("");
     try {
-      const constraints = { video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" }, audio: false };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Si és capturadora HDMI (o qualsevol dispositiu sense facing mode),
+      // no posem facingMode ni resolució — deixem que el dispositiu mani
+      const video = deviceId
+        ? { deviceId: { exact: deviceId } }
+        : true; // true = cap constraint, agafa el primer dispositiu disponible
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
       if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
       _activeStream = stream;
       const v = videoRef.current; if (!v) return;
@@ -372,9 +376,10 @@ function CameraCapture({ onCapture, onCancel }) {
               </select>
             </div>
           )}
-          <div style={{position:"relative",background:"#000",borderRadius:12,overflow:"hidden",marginBottom:12}}>
-            <video ref={videoRef} playsInline muted style={{width:"100%",display:"block",maxHeight:"60vh",objectFit:"contain"}}/>
-            {!ready && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:T.muted,fontSize:13,minHeight:180}}>Iniciant càmera…</div>}
+          <div style={{position:"relative",background:"#000",borderRadius:12,overflow:"hidden",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"center",minHeight:180}}>
+            <video ref={videoRef} playsInline muted
+              style={{width:"100%",height:"auto",display:"block",maxHeight:"55vh"}}/>
+            {!ready && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:T.muted,fontSize:13}}>Iniciant càmera…</div>}
           </div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={onCancel} style={btn("def",{flex:1})}>Cancel·lar</button>
