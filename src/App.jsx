@@ -452,13 +452,6 @@ export default function App() {
     <div style={{minHeight:"100vh"}}>
       <style>{GF}</style>
 
-      {/* ENV WARNING */}
-      {missingEnv && (
-        <div style={{background:"#3a1a00",borderBottom:`1px solid #f7b73155`,padding:"10px 16px",fontSize:13,color:"#f7b731",textAlign:"center"}}>
-          ⚠️ Falten variables d'entorn: {!GROQ_KEY&&"VITE_GROQ_API "}{!IMGBB_KEY&&"VITE_IMGBB_API"}. Crea un fitxer <code>.env</code> o configura-les a Vercel.
-        </div>
-      )}
-
       {/* NAVBAR */}
       <div style={{background:T.card,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,padding:"0 16px",height:52,position:"sticky",top:0,zIndex:100}}>
         {view!=="home"&&(
