@@ -29,7 +29,10 @@ async function uploadImgbb(b64, name = "xapa") {
     body: JSON.stringify({ image: b64, name }),
   });
   const d = await r.json();
-  if (!d.success) throw new Error(d.error?.message || "Error pujant imatge");
+  if (!r.ok || !d.success) {
+    const msg = d.error?.message || d.error || JSON.stringify(d);
+    throw new Error(`ImgBB (${r.status}): ${msg}`);
+  }
   return d.data.display_url;
 }
 
