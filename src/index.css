@@ -1,0 +1,6 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0b0b10; color: #e2dfd4; font-family: 'Outfit', sans-serif; -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { background: #1f1f2e; border-radius: 2px; }
+input, button, textarea, select { font-family: inherit; }
+a { color: #f7b731; }
