@@ -907,6 +907,8 @@ export default function App() {
         initQuery={initSearch}
         initImage={initImage}
       />}
+      <Analytics />
+      <SpeedInsights />
     </div>
   );
 }
