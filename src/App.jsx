@@ -9,11 +9,36 @@ const GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 const PALETTE = ["#e74c3c","#e67e22","#f1c40f","#27ae60","#16a085","#2980b9","#8e44ad","#c0392b","#00bcd4","#ff5722"];
 
 // ============================================================
-// STORAGE — localStorage
+// STORAGE — Upstash Redis via /api/storage proxy
 // ============================================================
 const S = {
-  get(k)    { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) { console.error("storage:", e); } },
+  async get(k) {
+    try {
+      const r = await fetch(`/api/storage?op=get&key=${encodeURIComponent(k)}`);
+      const d = await r.json();
+      if (d.value === null || d.value === undefined) return null;
+      // Upstash retorna el valor ja parsejat si era JSON, o string si no
+      return typeof d.value === "string" ? JSON.parse(d.value) : d.value;
+    } catch { return null; }
+  },
+  async set(k, v) {
+    try {
+      await fetch("/api/storage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "set", key: k, value: JSON.stringify(v) }),
+      });
+    } catch(e) { console.error("storage set:", e); }
+  },
+  async del(k) {
+    try {
+      await fetch("/api/storage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "del", key: k }),
+      });
+    } catch(e) { console.error("storage del:", e); }
+  },
 };
 
 // ============================================================
@@ -376,6 +401,7 @@ function Modal({ title, onClose, children, maxW=440 }) {
 // ============================================================
 export default function App() {
   const [albums, setAlbums]       = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [view, setView]           = useState("home");
   const [album, setAlbum]         = useState(null);
   const [sheetIdx, setSheetIdx]   = useState(0);
@@ -386,14 +412,18 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
-    setAlbums(S.get("xapes-albums") || []);
+    (async () => {
+      const a = await S.get("xapes-albums") || [];
+      setAlbums(a);
+      setLoading(false);
+    })();
   }, []);
 
-  const saveAlbums = a => { setAlbums(a); S.set("xapes-albums", a); };
-  const saveData   = (aid, d) => { setData(d); S.set(`xapes-ad-${aid}`, d); };
+  const saveAlbums = async a => { setAlbums(a); await S.set("xapes-albums", a); };
+  const saveData   = async (aid, d) => { setData(d); await S.set(`xapes-ad-${aid}`, d); };
 
-  const openAlbum = a => {
-    const d = S.get(`xapes-ad-${a.id}`) || { sheets:[], bigItems:[] };
+  const openAlbum = async a => {
+    const d = await S.get(`xapes-ad-${a.id}`) || { sheets:[], bigItems:[] };
     setAlbum(a); setData(d); setView("album");
   };
 
@@ -438,17 +468,25 @@ export default function App() {
   };
 
   const allXapes = () => {
-    const out=[];
+    const out = [];
     const d = data || {};
-    d.sheets?.forEach(s=>s.cells?.forEach((c,i)=>c&&out.push({...c,albumName:album?.name,albumId:album?.id,type:"cell"})));
-    d.bigItems?.forEach((c,i)=>c&&out.push({...c,albumName:album?.name,albumId:album?.id,bigIdx:i,type:"big"}));
+    d.sheets?.forEach(s => s.cells?.forEach((c,i) => c && out.push({...c, albumName:album?.name, albumId:album?.id, type:"cell"})));
+    d.bigItems?.forEach((c,i) => c && out.push({...c, albumName:album?.name, albumId:album?.id, bigIdx:i, type:"big"}));
     return out;
   };
+
+  if (loading) return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",gap:16}}>
+      <style>{GF}</style>
+      <div style={{fontSize:48}}>📌</div>
+      <p style={{fontFamily:"Fraunces",fontSize:24,color:T.accent}}>Xapes</p>
+      <p style={{color:T.muted,fontSize:13}}>Carregant col·lecció…</p>
+    </div>
+  );
 
   return (
     <div style={{minHeight:"100vh"}}>
       <style>{GF}</style>
-
       {/* NAVBAR */}
       <div style={{background:T.card,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,padding:"0 16px",height:52,position:"sticky",top:0,zIndex:100}}>
         {view!=="home"&&(
