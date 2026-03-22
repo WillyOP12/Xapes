@@ -372,9 +372,9 @@ function CameraCapture({ onCapture, onCancel }) {
               </select>
             </div>
           )}
-          <div style={{position:"relative",background:"#000",borderRadius:12,overflow:"hidden",marginBottom:12,aspectRatio:"4/3"}}>
-            <video ref={videoRef} playsInline muted style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-            {!ready && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:T.muted,fontSize:13}}>Iniciant càmera…</div>}
+          <div style={{position:"relative",background:"#000",borderRadius:12,overflow:"hidden",marginBottom:12}}>
+            <video ref={videoRef} playsInline muted style={{width:"100%",display:"block",maxHeight:"60vh",objectFit:"contain"}}/>
+            {!ready && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:T.muted,fontSize:13,minHeight:180}}>Iniciant càmera…</div>}
           </div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={onCancel} style={btn("def",{flex:1})}>Cancel·lar</button>
