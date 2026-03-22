@@ -5,8 +5,6 @@ import './index.css';
 // CONSTANTS
 // ============================================================
 const COLS = 6, ROWS = 8, N = COLS * ROWS;
-const GROQ_KEY  = import.meta.env.VITE_GROQ_API;
-const IMGBB_KEY = import.meta.env.VITE_IMGBB_API;
 const GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 const PALETTE = ["#e74c3c","#e67e22","#f1c40f","#27ae60","#16a085","#2980b9","#8e44ad","#c0392b","#00bcd4","#ff5722"];
 
@@ -25,26 +23,24 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const newSheet = () => ({ id: uid(), cells: Array(N).fill(null) });
 
 async function uploadImgbb(b64, name = "xapa") {
-  const fd = new FormData();
-  fd.append("image", b64);
-  fd.append("name", name);
-  const r = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: "POST", body: fd });
+  const r = await fetch("/api/imgbb", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: b64, name }),
+  });
   const d = await r.json();
   if (!d.success) throw new Error(d.error?.message || "Error pujant imatge");
   return d.data.display_url;
 }
 
 async function groqVision(messages, maxTokens = 200) {
-  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const r = await fetch("/api/groq", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${GROQ_KEY}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: GROQ_MODEL, max_tokens: maxTokens, messages }),
   });
   const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
+  if (d.error) throw new Error(d.error.message || d.error);
   return d.choices?.[0]?.message?.content || "";
 }
 
@@ -445,8 +441,6 @@ export default function App() {
     d.bigItems?.forEach((c,i)=>c&&out.push({...c,albumName:album?.name,albumId:album?.id,bigIdx:i,type:"big"}));
     return out;
   };
-
-  const missingEnv = !GROQ_KEY || !IMGBB_KEY;
 
   return (
     <div style={{minHeight:"100vh"}}>
