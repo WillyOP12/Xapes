@@ -586,9 +586,15 @@ export default function App() {
 
   const restoreFromUrl = async (loadedAlbums) => {
     const p = getParams();
-    const albumId = p.get("album");
-    const fulla   = p.get("fulla");
-    const page    = p.get("page");
+    const albumId  = p.get("album");
+    const fulla    = p.get("fulla");
+    const page     = p.get("page");
+    const cercaQ   = p.get("cerca");
+    const tagQ     = p.get("tag");
+    const xapaId   = p.get("xapa");
+    const imageB64 = p.get("image");
+    const nouFlag  = p.get("nou");
+
     if (!albumId) return;
     const found = (loadedAlbums || albums).find(a => a.id === albumId);
     if (!found) return;
@@ -598,14 +604,65 @@ export default function App() {
     if (!Array.isArray(d.sheets))   d.sheets   = [];
     if (!Array.isArray(d.bigItems)) d.bigItems = [];
     setAlbum(found); setData(d);
+
+    // Navega a la fulla
     if (fulla !== null) {
       const idx = Math.max(0, parseInt(fulla, 10) - 1) || 0;
       setSheetIdx(idx); setView("sheet");
     } else {
       setView("album");
     }
-    if (page === "cerca") setSearchOpen(true);
+
+    // ?xapa=id — obre la xapa directament
+    if (xapaId) {
+      let fcell = null, fidx = null, fsi = null, fbig = null, fbi = null;
+      for (let si = 0; si < d.sheets.length; si++) {
+        const ci = d.sheets[si].cells.findIndex(c => c?.id === xapaId);
+        if (ci !== -1) { fcell = d.sheets[si].cells[ci]; fidx = ci; fsi = si; break; }
+      }
+      if (!fcell) {
+        const bi = (d.bigItems || []).findIndex(c => c?.id === xapaId);
+        if (bi !== -1) { fbig = d.bigItems[bi]; fbi = bi; }
+      }
+      if (fcell) {
+        setSheetIdx(fsi); setView("sheet");
+        setTimeout(() => setModal({ t:"view", cell: fcell, idx: fidx }), 120);
+      } else if (fbig) {
+        setView("album");
+        setTimeout(() => setModal({ t:"viewBig", item: fbig, idx: fbi }), 120);
+      }
+    }
+
+    // ?image=b64 — obre cerca visual amb imatge precarregada
+    if (imageB64) {
+      setInitImage(decodeURIComponent(imageB64));
+      setSearchOpen(true);
+    }
+
+    // ?cerca= o ?tag= — obre cerca text
+    if ((page === "cerca" || cercaQ || tagQ) && !imageB64) {
+      setSearchOpen(true);
+      if (cercaQ) setInitSearch(cercaQ);
+      if (tagQ)   setInitSearch(tagQ);
+    }
+
+    // ?nou=1 + ?foto= + ?nom= — obre modal d'afegir preomplert
+    const fotoParam  = p.get("foto");
+    const nomParam   = p.get("nom");
+    const tagsParam  = p.get("tags");
+    const notesParam = p.get("notes");
+    if (nouFlag === "1") {
+      const modalData = { t:"add", idx: 0 };
+      if (fotoParam)  modalData.initFoto  = decodeURIComponent(fotoParam);
+      if (nomParam)   modalData.initNom   = decodeURIComponent(nomParam);
+      if (tagsParam)  modalData.initTags  = decodeURIComponent(tagsParam);
+      if (notesParam) modalData.initNotes = decodeURIComponent(notesParam);
+      setTimeout(() => setModal(modalData), 150);
+    }
   };
+
+  const [initSearch, setInitSearch] = useState("");
+  const [initImage,  setInitImage]  = useState(null);
 
   // --- Escolta el botó enrere del navegador ---
   useEffect(() => {
@@ -618,11 +675,14 @@ export default function App() {
   useEffect(() => {
     if (loading) return;
     const p = new URLSearchParams();
-    if (album)         p.set("album", album.id);
-    if (view === "sheet") p.set("fulla", String(sheetIdx + 1));
-    if (searchOpen)    p.set("page", "cerca");
+    if (album)              p.set("album", album.id);
+    if (view === "sheet")   p.set("fulla", String(sheetIdx + 1));
+    if (searchOpen)         p.set("page",  "cerca");
+    if (modal?.t === "view"    && modal.cell?.id) p.set("xapa", modal.cell.id);
+    if (modal?.t === "viewBig" && modal.item?.id) p.set("xapa", modal.item.id);
+    if (modal?.t === "add")     p.set("nou", "1");
     replaceUrl(p);
-  }, [view, album, sheetIdx, searchOpen, loading]);
+  }, [view, album, sheetIdx, searchOpen, modal, loading]);
 
   const saveAlbums = async a => { setAlbums(a); await S.set("xapes-albums", a); };
   const saveData   = async (aid, d) => { setData(d); await S.set(`xapes-ad-${aid}`, d); };
@@ -756,8 +816,10 @@ export default function App() {
       )}
       {modal?.t==="add"&&(
         <AddXapaModal title="Afegir xapa" busy={busy} setBusy={setBusy} onClose={()=>setModal(null)}
-          onSave={async({name,imageUrl,description})=>{
-            const nd={...data,sheets:data.sheets.map((s,si)=>si!==sheetIdx?s:(()=>{const c=[...s.cells];c[modal.idx]={id:uid(),name,imageUrl,description};return{...s,cells:c};})())};
+          initNom={modal.initNom} initFoto={modal.initFoto}
+          initTags={modal.initTags} initNotes={modal.initNotes}
+          onSave={async({name,imageUrl,description,fingerprint})=>{
+            const nd={...data,sheets:data.sheets.map((s,si)=>si!==sheetIdx?s:(()=>{const c=[...s.cells];c[modal.idx]={id:uid(),name,imageUrl,description,fingerprint};return{...s,cells:c};})())};
             saveData(album.id,nd); setModal(null);
           }}/>
       )}
@@ -788,7 +850,12 @@ export default function App() {
             saveData(album.id,nd); setModal(null);
           }}/>
       )}
-      {searchOpen&&<SearchModal onClose={()=>setSearchOpen(false)} getAllXapes={allXapes}/>}
+      {searchOpen&&<SearchModal
+        onClose={()=>{setSearchOpen(false);setInitSearch("");setInitImage(null);}}
+        getAllXapes={allXapes}
+        initQuery={initSearch}
+        initImage={initImage}
+      />}
     </div>
   );
 }
@@ -971,19 +1038,83 @@ function AlbumModal({ init, onClose, onSave }) {
 // ============================================================
 // ADD XAPA MODAL
 // ============================================================
-function AddXapaModal({ title, busy, setBusy, onClose, onSave }) {
-  const [name, setName]   = useState("");
-  const [step, setStep]   = useState("form"); // form | camera | crop
-  const [file, setFile]   = useState(null);
-  const [b64, setB64]     = useState(null);
-  const [prev, setPrev]   = useState(null);
+function AddXapaModal({ title, busy, setBusy, onClose, onSave, initNom = "", initFoto = null, initTags = "", initNotes = "" }) {
+  const [name,     setName]     = useState(initNom);
+  const [tags,     setTags]     = useState(initTags);
+  const [notes,    setNotes]    = useState(initNotes);
+  const [step,     setStep]     = useState("form");
+  const [file,     setFile]     = useState(null);
+  const [b64,      setB64]      = useState(null);
+  const [prev,     setPrev]     = useState(null);
+  const [urlInput, setUrlInput] = useState("");
+  const [urlMode,  setUrlMode]  = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef();
+  const dropRef = useRef();
+
+  // Carrega initFoto si ve per URL (?foto=)
+  useEffect(() => {
+    if (!initFoto) return;
+    (async () => {
+      setBusy("Carregant foto des de URL…");
+      try {
+        if (initFoto.startsWith("data:image") || !initFoto.startsWith("http")) {
+          const b64data = initFoto.includes(",") ? initFoto.split(",")[1] : initFoto;
+          setB64(b64data); setPrev(`data:image/jpeg;base64,${b64data}`);
+        } else {
+          const r = await fetch(initFoto);
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const blob = await r.blob();
+          setFile(new File([blob], "foto.jpg", { type: blob.type })); setStep("crop");
+        }
+      } catch(e) { alert("No s'ha pogut carregar ?foto=: " + e.message); }
+      finally { setBusy(""); }
+    })();
+  }, []);
 
   const onCrop = d => { setB64(d); setPrev(`data:image/jpeg;base64,${d}`); setStep("form"); setFile(null); };
-  const pickFile = f => { if(f){ setFile(f); setStep("crop"); } };
+  const pickFile = f => { if (f) { setFile(f); setStep("crop"); } };
+
+  // URL → blob → File
+  const loadFromUrl = async () => {
+    if (!urlInput.trim()) return;
+    setBusy("Carregant URL…");
+    try {
+      const r = await fetch(urlInput.trim());
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = await r.blob();
+      if (!blob.type.startsWith("image/")) throw new Error("No és una imatge");
+      pickFile(new File([blob], "url.jpg", { type: blob.type }));
+      setUrlMode(false); setUrlInput("");
+    } catch(e) { alert("No s'ha pogut carregar: " + e.message); }
+    finally { setBusy(""); }
+  };
+
+  // Portapapers Ctrl+V
+  useEffect(() => {
+    const onPaste = e => {
+      if (step !== "form" || prev) return;
+      const items = Array.from(e.clipboardData?.items || []);
+      const imgItem = items.find(i => i.type.startsWith("image/"));
+      if (imgItem) { e.preventDefault(); pickFile(imgItem.getAsFile()); }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [step, prev]);
+
+  // Drag & drop
+  const onDragOver  = e => { e.preventDefault(); setDragOver(true); };
+  const onDragLeave = () => setDragOver(false);
+  const onDrop = e => {
+    e.preventDefault(); setDragOver(false);
+    const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"));
+    if (f) { pickFile(f); return; }
+    const url = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+    if (url?.match(/^https?:\/\//)) { setUrlInput(url); setUrlMode(true); }
+  };
 
   const save = async () => {
-    if (!name.trim()||!b64) return;
+    if (!name.trim() || !b64) return;
     setBusy("Calculant fingerprint…");
     const fingerprint = await computeFingerprint(b64);
     setBusy("Pujant imatge…");
@@ -991,63 +1122,109 @@ function AddXapaModal({ title, busy, setBusy, onClose, onSave }) {
       const url = await uploadImgbb(b64, name);
       setBusy("Descrivint xapa amb IA…");
       const desc = await describePin(url);
-      await onSave({name:name.trim(), imageUrl:url, description:desc, fingerprint});
-    } catch(e) { alert("Error: "+e.message); }
+      const tagsArr = tags.split(",").map(t => t.trim()).filter(Boolean);
+      await onSave({ name: name.trim(), imageUrl: url, description: desc, fingerprint, tags: tagsArr, notes });
+    } catch(e) { alert("Error: " + e.message); }
     finally { setBusy(""); }
   };
 
-  if (step==="camera") return (
-    <Modal title="Càmera" onClose={()=>{ stopAllCameras(); setStep("form"); }} maxW={500}>
+  // Càmera: quan torna, conserva nom/tags/notes que ja havia escrit
+  if (step === "camera") return (
+    <Modal title={`Càmera${name ? ` — ${name}` : ""}`} onClose={()=>{ stopAllCameras(); setStep("form"); }} maxW={500}>
       <CameraCapture onCapture={f=>{setFile(f);setStep("crop");}} onCancel={()=>{ stopAllCameras(); setStep("form"); }}/>
     </Modal>
   );
-  if (step==="crop"&&file) return (
-    <Modal title="Retallar imatge" onClose={()=>{setStep("form");setFile(null);}}>
+  if (step === "crop" && file) return (
+    <Modal title="Retallar imatge" onClose={()=>{setStep("form");setFile(null);}} maxW={560}>
       <Cropper file={file} onDone={onCrop} onCancel={()=>{setStep("form");setFile(null);}}/>
     </Modal>
   );
 
+  const OPTS = [
+    { icon:"📷", label:"Càmera",      action: ()=>setStep("camera") },
+    { icon:"🖼️", label:"Fitxer",      action: ()=>fileRef.current?.click() },
+    { icon:"📋", label:"Portapapers", action: async () => {
+      try {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imgType = item.types.find(t => t.startsWith("image/"));
+          if (imgType) { pickFile(new File([await item.getType(imgType)], "paste.png", { type: imgType })); return; }
+        }
+        alert("No hi ha cap imatge al portapapers.\nTambé pots fer Ctrl+V.");
+      } catch { alert("Fes Ctrl+V directament per enganxar."); }
+    }},
+    { icon:"🔗", label:"URL", action: ()=>setUrlMode(v=>!v) },
+  ];
+
+  const canSave = name.trim() && b64;
+
   return (
     <Modal title={title} onClose={onClose}>
       {busy
-        ?<div style={{textAlign:"center",padding:"32px 0",color:T.muted}}>
-          <div style={{fontSize:30,marginBottom:12}}>⏳</div>
-          <p>{busy}</p>
-        </div>
-        :<>
+        ? <div style={{textAlign:"center",padding:"32px 0",color:T.muted}}>
+            <div style={{fontSize:30,marginBottom:12}}>⏳</div>
+            <p>{busy}</p>
+          </div>
+        : <>
           <label style={LBL}>Nom de la xapa</label>
           <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex: Polzets, CUP, Arquet…"
-            style={{...INP,marginBottom:16}} autoFocus/>
+            style={{...INP,marginBottom:12}} autoFocus/>
+
+          <label style={LBL}>Etiquetes <span style={{color:T.muted,fontWeight:400,textTransform:"none",fontSize:11}}>(separades per comes)</span></label>
+          <input value={tags} onChange={e=>setTags(e.target.value)} placeholder="vintage, CUP, aniversari…"
+            style={{...INP,marginBottom:12}}/>
+
+          <label style={LBL}>Notes</label>
+          <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+            placeholder="On la vas trobar, curiositats…"
+            style={{...INP,minHeight:52,resize:"vertical",lineHeight:1.6,marginBottom:12}}/>
+
           <label style={LBL}>Foto</label>
           {prev
-            ?<div style={{marginBottom:16}}>
-              <img src={prev} alt="preview" style={{width:100,height:100,objectFit:"cover",borderRadius:10,display:"block",marginBottom:8}}/>
-              <button onClick={()=>{setPrev(null);setB64(null);}} style={btn("def",{fontSize:12,padding:"6px 12px"})}>Canviar foto</button>
-            </div>
-            :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-              <div onClick={()=>setStep("camera")}
-                style={{border:`2px dashed ${T.border}`,borderRadius:12,padding:"22px 10px",textAlign:"center",cursor:"pointer",transition:"border .12s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                <div style={{fontSize:26,marginBottom:6}}>📷</div>
-                <p style={{color:T.muted,fontSize:12}}>Càmera</p>
+            ? <div style={{marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
+                <img src={prev} alt="preview" style={{width:80,height:80,objectFit:"cover",borderRadius:10,display:"block",flexShrink:0}}/>
+                <button onClick={()=>{setPrev(null);setB64(null);}} style={btn("def",{fontSize:12,padding:"7px 14px"})}>Canviar foto</button>
               </div>
-              <div onClick={()=>fileRef.current?.click()}
-                style={{border:`2px dashed ${T.border}`,borderRadius:12,padding:"22px 10px",textAlign:"center",cursor:"pointer",transition:"border .12s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                <div style={{fontSize:26,marginBottom:6}}>🖼️</div>
-                <p style={{color:T.muted,fontSize:12}}>Fitxer</p>
-              </div>
-            </div>
+            : <>
+                <div ref={dropRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+                  style={{border:`2px dashed ${dragOver?T.accent:T.border}`,borderRadius:12,padding:"12px 10px",
+                    marginBottom:10,textAlign:"center",transition:"border .12s, background .12s",
+                    background:dragOver?"rgba(247,183,49,0.06)":"transparent"}}>
+                  <p style={{color:T.muted,fontSize:11,marginBottom:8}}>
+                    {dragOver ? "Deixa anar la imatge!" : "Arrossega aquí · Ctrl+V · o tria:"}
+                  </p>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                    {OPTS.map(({icon,label,action})=>(
+                      <div key={label} onClick={action}
+                        style={{background:T.empty,border:`1px solid ${T.border}`,borderRadius:9,
+                          padding:"10px 4px",textAlign:"center",cursor:"pointer",transition:"border .12s"}}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                        <div style={{fontSize:18,marginBottom:3}}>{icon}</div>
+                        <p style={{color:T.muted,fontSize:10}}>{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {urlMode && (
+                  <div style={{display:"flex",gap:8,marginBottom:10}}>
+                    <input value={urlInput} onChange={e=>setUrlInput(e.target.value)}
+                      placeholder="https://…" style={{...INP,flex:1}}
+                      onKeyDown={e=>e.key==="Enter"&&loadFromUrl()} autoFocus/>
+                    <button onClick={loadFromUrl} style={btn("pri",{padding:"10px 14px"})}>→</button>
+                  </div>
+                )}
+              </>
           }
+
           <input ref={fileRef} type="file" accept="image/*"
             onChange={e=>{pickFile(e.target.files?.[0]);e.target.value="";}}
             style={{display:"none"}}/>
-          <div style={{display:"flex",gap:8,marginTop:4}}>
+
+          <div style={{display:"flex",gap:8,marginTop:8}}>
             <button onClick={onClose} style={btn("def",{flex:1})}>Cancel·lar</button>
-            <button onClick={save} disabled={!name.trim()||!b64}
-              style={btn("pri",{flex:1,opacity:(!name.trim()||!b64)?0.4:1,cursor:(!name.trim()||!b64)?"not-allowed":"pointer"})}>
+            <button onClick={save} disabled={!canSave}
+              style={btn("pri",{flex:1,opacity:canSave?1:0.4,cursor:canSave?"pointer":"not-allowed"})}>
               Afegir ✓
             </button>
           </div>
@@ -1057,17 +1234,74 @@ function AddXapaModal({ title, busy, setBusy, onClose, onSave }) {
   );
 }
 
+  const onCrop = d => { setB64(d); setPrev(`data:image/jpeg;base64,${d}`); setStep("form"); setFile(null); };
+  const pickFile = f => { if (f) { setFile(f); setStep("crop"); } };
+
+  // URL → fetch com a blob → File
+  const loadFromUrl = async () => {
+    if (!urlInput.trim()) return;
+    setBusy("Carregant URL…");
+    try {
+      const r = await fetch(urlInput.trim());
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = await r.blob();
+      if (!blob.type.startsWith("image/")) throw new Error("No és una imatge");
+      pickFile(new File([blob], "url.jpg", { type: blob.type }));
+      setUrlMode(false); setUrlInput("");
+    } catch (e) { alert("No s'ha pogut carregar la URL: " + e.message); }
+    finally { setBusy(""); }
+  };
+
+  // Portapapers (Ctrl+V / enganxar)
+  useEffect(() => {
+    const onPaste = e => {
+      if (step !== "form" || prev) return;
+      const items = Array.from(e.clipboardData?.items || []);
+      const imgItem = items.find(i => i.type.startsWith("image/"));
+      if (imgItem) { e.preventDefault(); pickFile(imgItem.getAsFile()); }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [step, prev]);
+
+  // Drag & drop
+  const onDragOver = e => { e.preventDefault(); setDragOver(true); };
+  const onDragLeave = () => setDragOver(false);
+  const onDrop = e => {
+    e.preventDefault(); setDragOver(false);
+    const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"));
+    if (f) { pickFile(f); return; }
+    // Drag d'imatge des del navegador (dataTransfer.getData)
+    const url = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+    if (url?.match(/^https?:\/\//)) { setUrlInput(url); setUrlMode(true); }
+  };
+
 // ============================================================
 // VIEW XAPA MODAL
 // ============================================================
 function ViewXapaModal({ cell, onClose, onMove, onDelete }) {
+  const [copied, setCopied] = useState(false);
+
+  const shareUrl = () => {
+    const p = new URLSearchParams(window.location.search);
+    if (cell.id) p.set("xapa", cell.id);
+    const url = `${window.location.origin}${window.location.pathname}?${p}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   return (
     <Modal title={cell.name} onClose={onClose}>
       {cell.imageUrl&&<img src={cell.imageUrl} alt={cell.name} style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:12,marginBottom:14,display:"block"}}/>}
       {cell.description&&<p style={{color:T.muted,fontSize:13,marginBottom:20,lineHeight:1.7}}>{cell.description}</p>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <button onClick={onMove} style={btn("ghost")}>↔ Moure</button>
-        <button onClick={onDelete} style={btn("red")}>🗑 Eliminar</button>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        <button onClick={shareUrl} style={btn("ghost",{fontSize:13})}>
+          {copied ? "✓ Copiat!" : "🔗 Compartir"}
+        </button>
+        <button onClick={onMove}   style={btn("ghost",{fontSize:13})}>↔ Moure</button>
+        <button onClick={onDelete} style={btn("red",{fontSize:13})}>🗑 Eliminar</button>
       </div>
     </Modal>
   );
@@ -1076,30 +1310,62 @@ function ViewXapaModal({ cell, onClose, onMove, onDelete }) {
 // ============================================================
 // SEARCH MODAL — algo primer, IA opcional
 // ============================================================
-function SearchModal({ onClose, getAllXapes }) {
+function SearchModal({ onClose, getAllXapes, initQuery = "", initImage = null }) {
   const [allXapes] = useState(()=>getAllXapes());
-  const [query, setQuery]             = useState("");
-  const [textResults, setTextResults] = useState(null);
-  const [imgStep, setImgStep]         = useState("idle"); // idle | camera | crop | algo | ai
+  const [query, setQuery]             = useState(initQuery);
+  const [textResults, setTextResults] = useState(()=>{
+    if (!initQuery.trim()) return null;
+    const lq = initQuery.toLowerCase();
+    return getAllXapes().filter(x =>
+      x.name?.toLowerCase().includes(lq) || x.description?.toLowerCase().includes(lq) ||
+      (Array.isArray(x.tags) && x.tags.some(t => t.toLowerCase().includes(lq)))
+    );
+  });
+  const [imgStep, setImgStep]         = useState(initImage ? "algo" : "idle");
   const [imgFile, setImgFile]         = useState(null);
   const [queryFp, setQueryFp]         = useState(null);
-  const [queryB64, setQueryB64]       = useState(null);
+  const [queryB64, setQueryB64]       = useState(initImage);
   const [algoResults, setAlgoResults] = useState(null);
+  const [aiResults, setAiResults]     = useState(null);
+  const [err, setErr]                 = useState("");
+  const fRef = useRef();
+
+  // Si arriba initImage des de URL, executa l'algoritme directament
+  useEffect(() => {
+    if (!initImage) return;
+    (async () => {
+      const fp = await computeFingerprint(initImage);
+      setQueryFp(fp);
+      const pool = allXapes;
+      setAlgoResults(algoFindSimilar(fp, pool));
+      setImgStep("idle");
+    })();
+  }, []);
   const [aiResults, setAiResults]     = useState(null);
   const [err, setErr]                 = useState("");
   const fRef = useRef();
 
   const doTextSearch = q => {
     setQuery(q); setAlgoResults(null); setAiResults(null); setErr("");
+    // Actualitza ?cerca= a la URL (sense pushState per no trencar l'historial)
+    const p = new URLSearchParams(window.location.search);
+    if (q.trim()) p.set("cerca", q.trim()); else p.delete("cerca");
+    window.history.replaceState({}, "", p.toString() ? `?${p}` : window.location.pathname);
     if (!q.trim()) { setTextResults(null); return; }
     const lq = q.toLowerCase();
     setTextResults(allXapes.filter(x =>
-      x.name?.toLowerCase().includes(lq) || x.description?.toLowerCase().includes(lq)
+      x.name?.toLowerCase().includes(lq) ||
+      x.description?.toLowerCase().includes(lq) ||
+      (Array.isArray(x.tags) && x.tags.some(t => t.toLowerCase().includes(lq)))
     ));
   };
 
   const onCrop = async b64 => {
     setQueryB64(b64); setImgStep("algo"); setErr(""); setAiResults(null);
+    // Sincronitza ?image= a la URL perquè sigui compartible
+    const p = new URLSearchParams(window.location.search);
+    p.set("image", encodeURIComponent(b64));
+    window.history.replaceState({}, "", `?${p}`);
     const fp = await computeFingerprint(b64);
     setQueryFp(fp);
     const pool = textResults !== null ? textResults : allXapes;
@@ -1121,6 +1387,9 @@ function SearchModal({ onClose, getAllXapes }) {
   const reset = () => {
     setQuery(""); setTextResults(null); setAlgoResults(null); setAiResults(null);
     setImgFile(null); setQueryB64(null); setQueryFp(null); setErr(""); setImgStep("idle");
+    const p = new URLSearchParams(window.location.search);
+    p.delete("cerca"); p.delete("image");
+    window.history.replaceState({}, "", p.toString() ? `?${p}` : window.location.pathname);
   };
 
   if (imgStep==="camera") return (
