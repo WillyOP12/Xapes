@@ -11,15 +11,26 @@ const PALETTE = ["#e74c3c","#e67e22","#f1c40f","#27ae60","#16a085","#2980b9","#8
 // ============================================================
 // STORAGE — Upstash Redis via /api/storage proxy
 // ============================================================
+function safeParse(v) {
+  // Upstash pot retornar valors doble-stringificats si venen del proxy antic
+  // Parseja fins que no sigui string o fins que JSON.parse falli
+  let result = v;
+  let attempts = 0;
+  while (typeof result === "string" && attempts < 3) {
+    try { result = JSON.parse(result); attempts++; }
+    catch { break; }
+  }
+  return result;
+}
+
 const S = {
   async get(k) {
     try {
       const r = await fetch(`/api/storage?op=get&key=${encodeURIComponent(k)}`);
       const d = await r.json();
       if (d.value === null || d.value === undefined) return null;
-      // Upstash retorna el valor ja parsejat si era JSON, o string si no
-      return typeof d.value === "string" ? JSON.parse(d.value) : d.value;
-    } catch { return null; }
+      return safeParse(d.value);
+    } catch(e) { console.error("storage get error:", k, e); return null; }
   },
   async set(k, v) {
     try {
@@ -28,7 +39,7 @@ const S = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ op: "set", key: k, value: JSON.stringify(v) }),
       });
-    } catch(e) { console.error("storage set:", e); }
+    } catch(e) { console.error("storage set error:", k, e); }
   },
   async del(k) {
     try {
@@ -37,7 +48,7 @@ const S = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ op: "del", key: k }),
       });
-    } catch(e) { console.error("storage del:", e); }
+    } catch(e) { console.error("storage del error:", k, e); }
   },
 };
 
@@ -413,8 +424,8 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const a = await S.get("xapes-albums") || [];
-      setAlbums(a);
+      const a = await S.get("xapes-albums");
+      setAlbums(Array.isArray(a) ? a : []);
       setLoading(false);
     })();
   }, []);
@@ -423,7 +434,12 @@ export default function App() {
   const saveData   = async (aid, d) => { setData(d); await S.set(`xapes-ad-${aid}`, d); };
 
   const openAlbum = async a => {
-    const d = await S.get(`xapes-ad-${a.id}`) || { sheets:[], bigItems:[] };
+    const raw = await S.get(`xapes-ad-${a.id}`);
+    const d = (raw && typeof raw === "object" && !Array.isArray(raw))
+      ? raw
+      : { sheets: [], bigItems: [] };
+    if (!Array.isArray(d.sheets))   d.sheets   = [];
+    if (!Array.isArray(d.bigItems)) d.bigItems = [];
     setAlbum(a); setData(d); setView("album");
   };
 
