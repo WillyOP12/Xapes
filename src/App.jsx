@@ -209,80 +209,214 @@ function btn(v="pri", extra={}) {
 }
 
 // ============================================================
-// CROPPER
+// CROPPER — CSS overlay, handles a cantonades i costats, 1:1
 // ============================================================
 function Cropper({ file, onDone, onCancel }) {
-  const cvRef = useRef(); const imgRef = useRef();
-  const [rdy, setRdy] = useState(false);
-  const [crop, setCrop] = useState(null);
-  const drag = useRef(null);
+  const imgRef    = useRef();
+  const [imgSrc, setImgSrc]   = useState(null);
+  const [natW, setNatW]       = useState(0);
+  const [natH, setNatH]       = useState(0);
+  // crop en píxels de la imatge nativa
+  const [crop, setCrop]       = useState(null);
+  const drag = useRef(null); // { type, startX, startY, startCrop }
 
   useEffect(() => {
     const u = URL.createObjectURL(file);
+    setImgSrc(u);
     const img = new Image();
     img.onload = () => {
-      imgRef.current = img;
-      const s = Math.min(img.width, img.height);
-      setCrop({ x:(img.width-s)/2, y:(img.height-s)/2, s });
-      setRdy(true);
+      setNatW(img.naturalWidth);
+      setNatH(img.naturalHeight);
+      const s = Math.min(img.naturalWidth, img.naturalHeight);
+      setCrop({ x: (img.naturalWidth - s) / 2, y: (img.naturalHeight - s) / 2, s });
     };
     img.src = u;
     return () => URL.revokeObjectURL(u);
   }, [file]);
 
-  useEffect(() => {
-    if (!rdy || !crop || !cvRef.current) return;
-    const cv = cvRef.current, img = imgRef.current, ctx = cv.getContext("2d");
-    const mw = Math.min(460, (window.innerWidth||460)-48);
-    const sc = mw/img.width;
-    cv.width = img.width*sc; cv.height = img.height*sc;
-    ctx.drawImage(img, 0, 0, cv.width, cv.height);
-    ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillRect(0,0,cv.width,cv.height);
-    const [cx,cy,cs]=[crop.x*sc,crop.y*sc,crop.s*sc];
-    ctx.drawImage(img, crop.x,crop.y,crop.s,crop.s, cx,cy,cs,cs);
-    ctx.strokeStyle=T.accent; ctx.lineWidth=2; ctx.strokeRect(cx,cy,cs,cs);
-    const hs=10; ctx.fillStyle=T.accent;
-    [[cx,cy],[cx+cs-hs,cy],[cx,cy+cs-hs],[cx+cs-hs,cy+cs-hs]].forEach(([hx,hy])=>ctx.fillRect(hx,hy,hs,hs));
-  }, [rdy, crop]);
+  // Converteix coordenades de pantalla → píxels de la imatge
+  const toNat = (clientX, clientY) => {
+    const el = imgRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const r = el.getBoundingClientRect();
+    const scX = natW / r.width, scY = natH / r.height;
+    return { x: (clientX - r.left) * scX, y: (clientY - r.top) * scY };
+  };
 
-  const toImg = e => {
-    const cv=cvRef.current, r=cv.getBoundingClientRect(), img=imgRef.current;
-    const sc=img.width/cv.clientWidth, s=e.touches?e.touches[0]:e;
-    return { x:(s.clientX-r.left)*sc, y:(s.clientY-r.top)*sc };
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+  const onPointerDown = (e, type) => {
+    e.preventDefault(); e.stopPropagation();
+    drag.current = {
+      type,
+      startX: e.clientX, startY: e.clientY,
+      startCrop: { ...crop },
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup",   onPointerUp);
   };
-  const dn = e => {
-    if (!crop) return; e.preventDefault();
-    const p=toImg(e);
-    if (p.x>=crop.x&&p.x<=crop.x+crop.s&&p.y>=crop.y&&p.y<=crop.y+crop.s)
-      drag.current={ox:p.x-crop.x,oy:p.y-crop.y};
+
+  const onPointerMove = (e) => {
+    if (!drag.current) return;
+    const { type, startX, startY, startCrop: sc } = drag.current;
+    const dx = (e.clientX - startX) * (natW / (imgRef.current?.getBoundingClientRect().width || 1));
+    const dy = (e.clientY - startY) * (natH / (imgRef.current?.getBoundingClientRect().height || 1));
+
+    setCrop(prev => {
+      let { x, y, s } = sc;
+
+      if (type === "move") {
+        return {
+          s,
+          x: clamp(x + dx, 0, natW - s),
+          y: clamp(y + dy, 0, natH - s),
+        };
+      }
+
+      // Handles de cantonada i costat — mantenen 1:1
+      // L'ancora és la cantonada/costat oposat
+      let newS = s, newX = x, newY = y;
+
+      if (type === "tl") {
+        // Àncora: bottom-right
+        const ax = x + s, ay = y + s;
+        const delta = Math.max(-dx, -dy); // negatiu = encongir
+        newS = clamp(s + delta, 20, Math.min(ax, ay));
+        newX = ax - newS; newY = ay - newS;
+      } else if (type === "tr") {
+        // Àncora: bottom-left
+        const ay = y + s;
+        const delta = Math.max(dx, -dy);
+        newS = clamp(s + delta, 20, Math.min(natW - x, ay));
+        newX = x; newY = ay - newS;
+      } else if (type === "bl") {
+        // Àncora: top-right
+        const ax = x + s;
+        const delta = Math.max(-dx, dy);
+        newS = clamp(s + delta, 20, Math.min(ax, natH - y));
+        newX = ax - newS; newY = y;
+      } else if (type === "br") {
+        // Àncora: top-left
+        const delta = Math.max(dx, dy);
+        newS = clamp(s + delta, 20, Math.min(natW - x, natH - y));
+        newX = x; newY = y;
+      } else if (type === "t") {
+        const ay = y + s;
+        newS = clamp(s - dy, 20, ay);
+        newX = x + (s - newS) / 2; newY = ay - newS;
+      } else if (type === "b") {
+        newS = clamp(s + dy, 20, Math.min(natW - x, natH - y));
+        newX = x + (s - newS) / 2; newY = y;
+      } else if (type === "l") {
+        const ax = x + s;
+        newS = clamp(s - dx, 20, ax);
+        newX = ax - newS; newY = y + (s - newS) / 2;
+      } else if (type === "r") {
+        newS = clamp(s + dx, 20, Math.min(natW - x, natH - y));
+        newX = x; newY = y + (s - newS) / 2;
+      }
+
+      // Clamp final dins la imatge
+      newX = clamp(newX, 0, natW - newS);
+      newY = clamp(newY, 0, natH - newS);
+      return { x: newX, y: newY, s: newS };
+    });
   };
-  const mv = e => {
-    if (!drag.current) return; e.preventDefault();
-    const p=toImg(e), img=imgRef.current;
-    setCrop(c=>({...c, x:Math.max(0,Math.min(img.width-c.s,p.x-drag.current.ox)), y:Math.max(0,Math.min(img.height-c.s,p.y-drag.current.oy))}));
+
+  const onPointerUp = () => {
+    drag.current = null;
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup",   onPointerUp);
   };
-  const up = () => { drag.current=null; };
+
   const confirm = () => {
-    const oc=document.createElement("canvas"); oc.width=oc.height=400;
-    oc.getContext("2d").drawImage(imgRef.current,crop.x,crop.y,crop.s,crop.s,0,0,400,400);
-    onDone(oc.toDataURL("image/jpeg",0.85).split(",")[1]);
+    const oc = document.createElement("canvas"); oc.width = oc.height = 400;
+    const img = new Image(); img.src = imgSrc;
+    img.onload = () => {
+      oc.getContext("2d").drawImage(img, crop.x, crop.y, crop.s, crop.s, 0, 0, 400, 400);
+      onDone(oc.toDataURL("image/jpeg", 0.88).split(",")[1]);
+    };
   };
 
-  if (!rdy) return <div style={{color:T.muted,textAlign:"center",padding:24}}>Carregant…</div>;
+  if (!imgSrc || !crop || !natW) return (
+    <div style={{color:T.muted,textAlign:"center",padding:24}}>Carregant…</div>
+  );
+
+  // Percentatges per al CSS
+  const pct = v => `${(v / natW * 100).toFixed(4)}%`;
+  const pctH = v => `${(v / natH * 100).toFixed(4)}%`;
+  const left   = pct(crop.x), top    = pctH(crop.y);
+  const width  = pct(crop.s), height = pctH(crop.s);
+  const right  = pct(natW - crop.x - crop.s);
+  const bottom = pctH(natH - crop.y - crop.s);
+
+  const HA = T.accent; // handle color
+  const HOVL = "rgba(0,0,0,0.55)";
+
+  const cornerH = (type, pos) => (
+    <div onPointerDown={e => onPointerDown(e, type)}
+      style={{ position:"absolute", width:14, height:14, background:HA, borderRadius:3,
+        cursor: type==="tl"?"nw-resize":type==="tr"?"ne-resize":type==="bl"?"sw-resize":"se-resize",
+        zIndex:3, touchAction:"none", ...pos }} />
+  );
+  const edgeH = (type, pos, cur) => (
+    <div onPointerDown={e => onPointerDown(e, type)}
+      style={{ position:"absolute", background:HA, borderRadius:2, zIndex:3, touchAction:"none", cursor:cur, ...pos }} />
+  );
+
   return (
     <div>
-      <p style={{color:T.muted,fontSize:13,marginBottom:10}}>Arrossega per posicionar · ajusta la mida amb el control</p>
-      <canvas ref={cvRef} style={{width:"100%",cursor:"grab",touchAction:"none",borderRadius:8,display:"block"}}
-        onMouseDown={dn} onMouseMove={mv} onMouseUp={up} onMouseLeave={up}
-        onTouchStart={dn} onTouchMove={mv} onTouchEnd={up}/>
-      {imgRef.current&&crop&&(
-        <input type="range" min={30} max={Math.min(imgRef.current.width,imgRef.current.height)} value={crop.s}
-          onChange={e=>{const ns=+e.target.value;setCrop(c=>({s:ns,x:Math.min(c.x,imgRef.current.width-ns),y:Math.min(c.y,imgRef.current.height-ns)}));}}
-          style={{width:"100%",margin:"12px 0 4px",accentColor:T.accent}}/>
-      )}
-      <div style={{display:"flex",gap:8,marginTop:10}}>
+      <p style={{color:T.muted,fontSize:12,marginBottom:10,textAlign:"center"}}>
+        Arrossega les cantonades o costats per retallar · centre per moure
+      </p>
+
+      {/* CONTENIDOR */}
+      <div style={{position:"relative",userSelect:"none",borderRadius:8,overflow:"hidden",touchAction:"none"}}>
+        <img ref={imgRef} src={imgSrc} alt="" draggable={false}
+          style={{width:"100%",display:"block",maxHeight:"60vh",objectFit:"contain"}} />
+
+        {/* OVERLAY FOSC: 4 tires */}
+        <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+          {/* top */}
+          <div style={{position:"absolute",top:0,left:0,right:0,height:top,background:HOVL}}/>
+          {/* bottom */}
+          <div style={{position:"absolute",bottom:0,left:0,right:0,height:bottom,background:HOVL}}/>
+          {/* left */}
+          <div style={{position:"absolute",top,bottom,left:0,width:left,background:HOVL}}/>
+          {/* right */}
+          <div style={{position:"absolute",top,bottom,right:0,width:right,background:HOVL}}/>
+        </div>
+
+        {/* BOX DE RETALL */}
+        <div onPointerDown={e => onPointerDown(e, "move")}
+          style={{position:"absolute",left,top,width,height,
+            border:`2px solid ${HA}`,cursor:"move",boxSizing:"border-box",touchAction:"none",zIndex:2}}>
+
+          {/* Regla dels terços */}
+          <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+            {[1,2].map(i=><>
+              <div key={`v${i}`} style={{position:"absolute",left:`${i*33.33}%`,top:0,bottom:0,width:1,background:"rgba(255,255,255,0.2)"}}/>
+              <div key={`h${i}`} style={{position:"absolute",top:`${i*33.33}%`,left:0,right:0,height:1,background:"rgba(255,255,255,0.2)"}}/>
+            </>)}
+          </div>
+
+          {/* Cantonades */}
+          {cornerH("tl", {top:-7,left:-7})}
+          {cornerH("tr", {top:-7,right:-7})}
+          {cornerH("bl", {bottom:-7,left:-7})}
+          {cornerH("br", {bottom:-7,right:-7})}
+
+          {/* Costats (barra fina al mig) */}
+          {edgeH("t",  {top:-4,left:"50%",transform:"translateX(-50%)",width:28,height:8},  "n-resize")}
+          {edgeH("b",  {bottom:-4,left:"50%",transform:"translateX(-50%)",width:28,height:8}, "s-resize")}
+          {edgeH("l",  {left:-4,top:"50%",transform:"translateY(-50%)",width:8,height:28},   "w-resize")}
+          {edgeH("r",  {right:-4,top:"50%",transform:"translateY(-50%)",width:8,height:28},  "e-resize")}
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:8,marginTop:14}}>
         <button onClick={onCancel} style={btn("def",{flex:1})}>Cancel·lar</button>
-        <button onClick={confirm} style={btn("pri",{flex:1})}>Retallar ✓</button>
+        <button onClick={confirm}  style={btn("pri",{flex:1})}>Retallar ✓</button>
       </div>
     </div>
   );
