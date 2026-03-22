@@ -650,13 +650,37 @@ export default function App() {
     const fotoParam  = p.get("foto");
     const nomParam   = p.get("nom");
     const tagsParam  = p.get("tags");
-    const notesParam = p.get("notes");
+    const tipusParam = p.get("tipus");
+    const estatParam = p.get("estat");
+    const anyParam   = p.get("any");
+    const origenParam= p.get("origen");
+    const fabParam   = p.get("fabricant");
+    const matParam   = p.get("material");
+    const midaParam  = p.get("mida");
+    const limitParam = p.get("limitada");
+    const numerParam = p.get("numeracio");
+    const adqParam   = p.get("adquirit");
+    const dataParam  = p.get("data");
+    const preuParam  = p.get("preu");
+    const valorParam = p.get("valor");
     if (nouFlag === "1") {
       const modalData = { t:"add", idx: 0 };
-      if (fotoParam)  modalData.initFoto  = decodeURIComponent(fotoParam);
-      if (nomParam)   modalData.initNom   = decodeURIComponent(nomParam);
-      if (tagsParam)  modalData.initTags  = decodeURIComponent(tagsParam);
-      if (notesParam) modalData.initNotes = decodeURIComponent(notesParam);
+      if (fotoParam)  modalData.initFoto      = decodeURIComponent(fotoParam);
+      if (nomParam)   modalData.initNom       = decodeURIComponent(nomParam);
+      if (tagsParam)  modalData.initTags      = decodeURIComponent(tagsParam);
+      if (tipusParam) modalData.initTipus     = decodeURIComponent(tipusParam);
+      if (estatParam) modalData.initEstat     = decodeURIComponent(estatParam);
+      if (anyParam)   modalData.initAny       = decodeURIComponent(anyParam);
+      if (origenParam)modalData.initOrigen    = decodeURIComponent(origenParam);
+      if (fabParam)   modalData.initFabricant = decodeURIComponent(fabParam);
+      if (matParam)   modalData.initMaterial  = decodeURIComponent(matParam);
+      if (midaParam)  modalData.initMida      = decodeURIComponent(midaParam);
+      if (limitParam) modalData.initLimitada  = limitParam === "1";
+      if (numerParam) modalData.initNumeracio = decodeURIComponent(numerParam);
+      if (adqParam)   modalData.initAdquirit  = decodeURIComponent(adqParam);
+      if (dataParam)  modalData.initDataAdq   = decodeURIComponent(dataParam);
+      if (preuParam)  modalData.initPreuPagat = decodeURIComponent(preuParam);
+      if (valorParam) modalData.initValorEst  = decodeURIComponent(valorParam);
       setTimeout(() => setModal(modalData), 150);
     }
   };
@@ -817,29 +841,45 @@ export default function App() {
       {modal?.t==="add"&&(
         <AddXapaModal title="Afegir xapa" busy={busy} setBusy={setBusy} onClose={()=>setModal(null)}
           initNom={modal.initNom} initFoto={modal.initFoto}
-          initTags={modal.initTags} initNotes={modal.initNotes}
-          onSave={async({name,imageUrl,description,fingerprint})=>{
-            const nd={...data,sheets:data.sheets.map((s,si)=>si!==sheetIdx?s:(()=>{const c=[...s.cells];c[modal.idx]={id:uid(),name,imageUrl,description,fingerprint};return{...s,cells:c};})())};
+          initTags={modal.initTags}
+          initTipus={modal.initTipus} initEstat={modal.initEstat}
+          initAny={modal.initAny} initOrigen={modal.initOrigen}
+          initFabricant={modal.initFabricant} initMaterial={modal.initMaterial} initMida={modal.initMida}
+          initLimitada={modal.initLimitada} initNumeracio={modal.initNumeracio}
+          initAdquirit={modal.initAdquirit} initDataAdq={modal.initDataAdq}
+          initPreuPagat={modal.initPreuPagat} initValorEst={modal.initValorEst}
+          onSave={async(xapa)=>{
+            const nd={...data,sheets:data.sheets.map((s,si)=>si!==sheetIdx?s:(()=>{const c=[...s.cells];c[modal.idx]={id:uid(),...xapa};return{...s,cells:c};})())};
             saveData(album.id,nd); setModal(null);
           }}/>
       )}
       {modal?.t==="view"&&(
         <ViewXapaModal cell={modal.cell} onClose={()=>setModal(null)}
+          onEdit={()=>setModal({t:"edit", cell:modal.cell, idx:modal.idx})}
           onMove={()=>{setMv({type:"cell",idx:modal.idx,item:modal.cell});setModal(null);}}
           onDelete={()=>{
             const nd={...data,sheets:data.sheets.map((s,si)=>si!==sheetIdx?s:(()=>{const c=[...s.cells];c[modal.idx]=null;return{...s,cells:c};})())};
             saveData(album.id,nd); setModal(null);
           }}/>
       )}
+      {modal?.t==="edit"&&(
+        <AddXapaModal title="Editar xapa" busy={busy} setBusy={setBusy}
+          initCell={modal.cell} onClose={()=>setModal(null)}
+          onSave={async(xapa)=>{
+            const nd={...data,sheets:data.sheets.map((s,si)=>si!==sheetIdx?s:(()=>{const c=[...s.cells];c[modal.idx]=xapa;return{...s,cells:c};})())};
+            saveData(album.id,nd); setModal(null);
+          }}/>
+      )}
       {modal?.t==="addBig"&&(
         <AddXapaModal title="Afegir xapa gran" busy={busy} setBusy={setBusy} onClose={()=>setModal(null)}
-          onSave={async({name,imageUrl,description})=>{
-            const nd={...data,bigItems:[...(data.bigItems||[]),{id:uid(),name,imageUrl,description}]};
+          onSave={async(xapa)=>{
+            const nd={...data,bigItems:[...(data.bigItems||[]),{id:uid(),...xapa}]};
             saveData(album.id,nd); setModal(null);
           }}/>
       )}
       {modal?.t==="viewBig"&&(
         <ViewXapaModal cell={modal.item} onClose={()=>setModal(null)}
+          onEdit={()=>setModal({t:"editBig", item:modal.item, idx:modal.idx})}
           onMove={()=>{
             if(!data.sheets.length){alert("Crea una fulla primer!");return;}
             setMv({type:"big",bigIdx:modal.idx,item:modal.item});
@@ -847,6 +887,14 @@ export default function App() {
           }}
           onDelete={()=>{
             const nd={...data,bigItems:(data.bigItems||[]).filter((_,i)=>i!==modal.idx)};
+            saveData(album.id,nd); setModal(null);
+          }}/>
+      )}
+      {modal?.t==="editBig"&&(
+        <AddXapaModal title="Editar xapa gran" busy={busy} setBusy={setBusy}
+          initCell={modal.item} onClose={()=>setModal(null)}
+          onSave={async(xapa)=>{
+            const nd={...data,bigItems:(data.bigItems||[]).map((it,i)=>i===modal.idx?xapa:it)};
             saveData(album.id,nd); setModal(null);
           }}/>
       )}
@@ -1035,47 +1083,46 @@ function AlbumModal({ init, onClose, onSave }) {
   );
 }
 
+
 // ============================================================
 // ADD XAPA MODAL
 // ============================================================
-function AddXapaModal({ title, busy, setBusy, onClose, onSave, initNom = "", initFoto = null, initTags = "", initNotes = "" }) {
-  const [name,     setName]     = useState(initNom);
-  const [tags,     setTags]     = useState(initTags);
-  const [notes,    setNotes]    = useState(initNotes);
-  const [step,     setStep]     = useState("form");
-  const [file,     setFile]     = useState(null);
-  const [b64,      setB64]      = useState(null);
-  const [prev,     setPrev]     = useState(null);
-  const [urlInput, setUrlInput] = useState("");
-  const [urlMode,  setUrlMode]  = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const fileRef = useRef();
-  const dropRef = useRef();
+function AddXapaModal({ title, busy, setBusy, onClose, onSave,
+  initNom="", initFoto=null, initTags="", initCell=null
+}) {
+  const isEdit = !!initCell;
+  const [name,     setName]    = useState(isEdit ? initCell.name                  : initNom);
+  const [tags,     setTags]    = useState(isEdit ? (initCell.tags||[]).join(", ") : initTags);
+  const [step,     setStep]    = useState("form");
+  const [file,     setFile]    = useState(null);
+  const [b64,      setB64]     = useState(null);
+  const [prev,     setPrev]    = useState(isEdit ? initCell.imageUrl : null);
+  const [urlInput, setUrlInput]= useState("");
+  const [urlMode,  setUrlMode] = useState(false);
+  const [dragOver, setDragOver]= useState(false);
+  const fileRef = useRef(), dropRef = useRef();
 
-  // Carrega initFoto si ve per URL (?foto=)
   useEffect(() => {
-    if (!initFoto) return;
+    if (!initFoto || isEdit) return;
     (async () => {
-      setBusy("Carregant foto des de URL…");
+      setBusy("Carregant foto…");
       try {
-        if (initFoto.startsWith("data:image") || !initFoto.startsWith("http")) {
-          const b64data = initFoto.includes(",") ? initFoto.split(",")[1] : initFoto;
-          setB64(b64data); setPrev(`data:image/jpeg;base64,${b64data}`);
+        if (!initFoto.startsWith("http")) {
+          const d = initFoto.includes(",") ? initFoto.split(",")[1] : initFoto;
+          setB64(d); setPrev(`data:image/jpeg;base64,${d}`);
         } else {
           const r = await fetch(initFoto);
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
           const blob = await r.blob();
           setFile(new File([blob], "foto.jpg", { type: blob.type })); setStep("crop");
         }
-      } catch(e) { alert("No s'ha pogut carregar ?foto=: " + e.message); }
+      } catch(e) { alert("Error carregant foto: " + e.message); }
       finally { setBusy(""); }
     })();
   }, []);
 
-  const onCrop = d => { setB64(d); setPrev(`data:image/jpeg;base64,${d}`); setStep("form"); setFile(null); };
+  const onCrop   = d => { setB64(d); setPrev(`data:image/jpeg;base64,${d}`); setStep("form"); setFile(null); };
   const pickFile = f => { if (f) { setFile(f); setStep("crop"); } };
 
-  // URL → blob → File
   const loadFromUrl = async () => {
     if (!urlInput.trim()) return;
     setBusy("Carregant URL…");
@@ -1090,31 +1137,33 @@ function AddXapaModal({ title, busy, setBusy, onClose, onSave, initNom = "", ini
     finally { setBusy(""); }
   };
 
-  // Portapapers Ctrl+V
   useEffect(() => {
     const onPaste = e => {
       if (step !== "form" || prev) return;
-      const items = Array.from(e.clipboardData?.items || []);
-      const imgItem = items.find(i => i.type.startsWith("image/"));
-      if (imgItem) { e.preventDefault(); pickFile(imgItem.getAsFile()); }
+      const img = Array.from(e.clipboardData?.items||[]).find(i=>i.type.startsWith("image/"));
+      if (img) { e.preventDefault(); pickFile(img.getAsFile()); }
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
   }, [step, prev]);
 
-  // Drag & drop
   const onDragOver  = e => { e.preventDefault(); setDragOver(true); };
   const onDragLeave = () => setDragOver(false);
   const onDrop = e => {
     e.preventDefault(); setDragOver(false);
-    const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"));
+    const f = Array.from(e.dataTransfer.files).find(f=>f.type.startsWith("image/"));
     if (f) { pickFile(f); return; }
     const url = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
     if (url?.match(/^https?:\/\//)) { setUrlInput(url); setUrlMode(true); }
   };
 
   const save = async () => {
-    if (!name.trim() || !b64) return;
+    if (!name.trim()) return;
+    const tagsArr = tags.split(",").map(t=>t.trim()).filter(Boolean);
+    if (isEdit && !b64) {
+      await onSave({ ...initCell, name: name.trim(), tags: tagsArr }); return;
+    }
+    if (!b64) return;
     setBusy("Calculant fingerprint…");
     const fingerprint = await computeFingerprint(b64);
     setBusy("Pujant imatge…");
@@ -1122,13 +1171,11 @@ function AddXapaModal({ title, busy, setBusy, onClose, onSave, initNom = "", ini
       const url = await uploadImgbb(b64, name);
       setBusy("Descrivint xapa amb IA…");
       const desc = await describePin(url);
-      const tagsArr = tags.split(",").map(t => t.trim()).filter(Boolean);
-      await onSave({ name: name.trim(), imageUrl: url, description: desc, fingerprint, tags: tagsArr, notes });
+      await onSave({ ...(isEdit ? initCell : {}), name: name.trim(), imageUrl: url, description: desc, fingerprint, tags: tagsArr });
     } catch(e) { alert("Error: " + e.message); }
     finally { setBusy(""); }
   };
 
-  // Càmera: quan torna, conserva nom/tags/notes que ja havia escrit
   if (step === "camera") return (
     <Modal title={`Càmera${name ? ` — ${name}` : ""}`} onClose={()=>{ stopAllCameras(); setStep("form"); }} maxW={500}>
       <CameraCapture onCapture={f=>{setFile(f);setStep("crop");}} onCancel={()=>{ stopAllCameras(); setStep("form"); }}/>
@@ -1140,68 +1187,68 @@ function AddXapaModal({ title, busy, setBusy, onClose, onSave, initNom = "", ini
     </Modal>
   );
 
+  const canSave = name.trim() && (isEdit || b64);
   const OPTS = [
-    { icon:"📷", label:"Càmera",      action: ()=>setStep("camera") },
-    { icon:"🖼️", label:"Fitxer",      action: ()=>fileRef.current?.click() },
-    { icon:"📋", label:"Portapapers", action: async () => {
+    { icon:"📷", action: ()=>setStep("camera") },
+    { icon:"🖼️", action: ()=>fileRef.current?.click() },
+    { icon:"📋", action: async () => {
       try {
         const items = await navigator.clipboard.read();
         for (const item of items) {
-          const imgType = item.types.find(t => t.startsWith("image/"));
-          if (imgType) { pickFile(new File([await item.getType(imgType)], "paste.png", { type: imgType })); return; }
+          const t = item.types.find(t=>t.startsWith("image/"));
+          if (t) { pickFile(new File([await item.getType(t)],"paste.png",{type:t})); return; }
         }
-        alert("No hi ha cap imatge al portapapers.\nTambé pots fer Ctrl+V.");
-      } catch { alert("Fes Ctrl+V directament per enganxar."); }
+        alert("No hi ha imatge. Fes Ctrl+V.");
+      } catch { alert("Fes Ctrl+V directament."); }
     }},
-    { icon:"🔗", label:"URL", action: ()=>setUrlMode(v=>!v) },
+    { icon:"🔗", action: ()=>setUrlMode(v=>!v) },
   ];
 
-  const canSave = name.trim() && b64;
-
   return (
-    <Modal title={title} onClose={onClose}>
+    <Modal title={title} onClose={onClose} maxW={440}>
       {busy
         ? <div style={{textAlign:"center",padding:"32px 0",color:T.muted}}>
-            <div style={{fontSize:30,marginBottom:12}}>⏳</div>
-            <p>{busy}</p>
+            <div style={{fontSize:30,marginBottom:12}}>⏳</div><p>{busy}</p>
           </div>
         : <>
-          <label style={LBL}>Nom de la xapa</label>
-          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex: Polzets, CUP, Arquet…"
-            style={{...INP,marginBottom:12}} autoFocus/>
+          <label style={LBL}>Nom *</label>
+          <input value={name} onChange={e=>setName(e.target.value)}
+            placeholder="Ex: CUP Independència…" style={{...INP,marginBottom:12}} autoFocus/>
 
-          <label style={LBL}>Etiquetes <span style={{color:T.muted,fontWeight:400,textTransform:"none",fontSize:11}}>(separades per comes)</span></label>
-          <input value={tags} onChange={e=>setTags(e.target.value)} placeholder="vintage, CUP, aniversari…"
-            style={{...INP,marginBottom:12}}/>
+          <label style={LBL}>Etiquetes <span style={{color:T.muted,fontWeight:400,fontSize:11}}>(separades per comes)</span></label>
+          <input value={tags} onChange={e=>setTags(e.target.value)}
+            placeholder="vintage, CUP, aniversari…" style={{...INP,marginBottom:12}}/>
 
-          <label style={LBL}>Notes</label>
-          <textarea value={notes} onChange={e=>setNotes(e.target.value)}
-            placeholder="On la vas trobar, curiositats…"
-            style={{...INP,minHeight:52,resize:"vertical",lineHeight:1.6,marginBottom:12}}/>
 
           <label style={LBL}>Foto</label>
           {prev
-            ? <div style={{marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
-                <img src={prev} alt="preview" style={{width:80,height:80,objectFit:"cover",borderRadius:10,display:"block",flexShrink:0}}/>
-                <button onClick={()=>{setPrev(null);setB64(null);}} style={btn("def",{fontSize:12,padding:"7px 14px"})}>Canviar foto</button>
+            ? <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                <div style={{position:"relative"}}>
+                  <img src={prev} alt="preview" style={{width:80,height:80,objectFit:"cover",borderRadius:10,display:"block"}}/>
+                  <button onClick={()=>{setPrev(null);setB64(null);}}
+                    style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",
+                      background:T.danger,border:"none",color:"#fff",cursor:"pointer",fontSize:12,
+                      display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                </div>
+                <span style={{color:T.muted,fontSize:12}}>Foto carregada</span>
               </div>
             : <>
                 <div ref={dropRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
-                  style={{border:`2px dashed ${dragOver?T.accent:T.border}`,borderRadius:12,padding:"12px 10px",
-                    marginBottom:10,textAlign:"center",transition:"border .12s, background .12s",
+                  style={{border:`2px dashed ${dragOver?T.accent:T.border}`,borderRadius:12,padding:"14px 10px",
+                    marginBottom:10,textAlign:"center",transition:"all .12s",
                     background:dragOver?"rgba(247,183,49,0.06)":"transparent"}}>
                   <p style={{color:T.muted,fontSize:11,marginBottom:8}}>
-                    {dragOver ? "Deixa anar la imatge!" : "Arrossega aquí · Ctrl+V · o tria:"}
+                    {dragOver ? "Deixa anar!" : "Arrossega aqui · Ctrl+V · o tria:"}
                   </p>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
-                    {OPTS.map(({icon,label,action})=>(
-                      <div key={label} onClick={action}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+                    {OPTS.map(({icon,action},i)=>(
+                      <div key={i} onClick={action}
                         style={{background:T.empty,border:`1px solid ${T.border}`,borderRadius:9,
-                          padding:"10px 4px",textAlign:"center",cursor:"pointer",transition:"border .12s"}}
+                          padding:"10px 4px",textAlign:"center",cursor:"pointer",
+                          fontSize:18,transition:"border .12s"}}
                         onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
                         onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                        <div style={{fontSize:18,marginBottom:3}}>{icon}</div>
-                        <p style={{color:T.muted,fontSize:10}}>{label}</p>
+                        {icon}
                       </div>
                     ))}
                   </div>
@@ -1216,16 +1263,13 @@ function AddXapaModal({ title, busy, setBusy, onClose, onSave, initNom = "", ini
                 )}
               </>
           }
-
           <input ref={fileRef} type="file" accept="image/*"
-            onChange={e=>{pickFile(e.target.files?.[0]);e.target.value="";}}
-            style={{display:"none"}}/>
-
+            onChange={e=>{pickFile(e.target.files?.[0]);e.target.value="";}} style={{display:"none"}}/>
           <div style={{display:"flex",gap:8,marginTop:8}}>
             <button onClick={onClose} style={btn("def",{flex:1})}>Cancel·lar</button>
             <button onClick={save} disabled={!canSave}
               style={btn("pri",{flex:1,opacity:canSave?1:0.4,cursor:canSave?"pointer":"not-allowed"})}>
-              Afegir ✓
+              {isEdit ? "Desar ✓" : "Afegir ✓"}
             </button>
           </div>
         </>
@@ -1234,78 +1278,53 @@ function AddXapaModal({ title, busy, setBusy, onClose, onSave, initNom = "", ini
   );
 }
 
-  const onCrop = d => { setB64(d); setPrev(`data:image/jpeg;base64,${d}`); setStep("form"); setFile(null); };
-  const pickFile = f => { if (f) { setFile(f); setStep("crop"); } };
-
-  // URL → fetch com a blob → File
-  const loadFromUrl = async () => {
-    if (!urlInput.trim()) return;
-    setBusy("Carregant URL…");
-    try {
-      const r = await fetch(urlInput.trim());
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const blob = await r.blob();
-      if (!blob.type.startsWith("image/")) throw new Error("No és una imatge");
-      pickFile(new File([blob], "url.jpg", { type: blob.type }));
-      setUrlMode(false); setUrlInput("");
-    } catch (e) { alert("No s'ha pogut carregar la URL: " + e.message); }
-    finally { setBusy(""); }
-  };
-
-  // Portapapers (Ctrl+V / enganxar)
-  useEffect(() => {
-    const onPaste = e => {
-      if (step !== "form" || prev) return;
-      const items = Array.from(e.clipboardData?.items || []);
-      const imgItem = items.find(i => i.type.startsWith("image/"));
-      if (imgItem) { e.preventDefault(); pickFile(imgItem.getAsFile()); }
-    };
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [step, prev]);
-
-  // Drag & drop
-  const onDragOver = e => { e.preventDefault(); setDragOver(true); };
-  const onDragLeave = () => setDragOver(false);
-  const onDrop = e => {
-    e.preventDefault(); setDragOver(false);
-    const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"));
-    if (f) { pickFile(f); return; }
-    // Drag d'imatge des del navegador (dataTransfer.getData)
-    const url = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
-    if (url?.match(/^https?:\/\//)) { setUrlInput(url); setUrlMode(true); }
-  };
-
 // ============================================================
 // VIEW XAPA MODAL
 // ============================================================
-function ViewXapaModal({ cell, onClose, onMove, onDelete }) {
+function ViewXapaModal({ cell, onClose, onMove, onDelete, onEdit }) {
+  const [confirmDel, setConfirmDel] = useState(false);
   const [copied, setCopied] = useState(false);
-
   const shareUrl = () => {
     const p = new URLSearchParams(window.location.search);
     if (cell.id) p.set("xapa", cell.id);
     const url = `${window.location.origin}${window.location.pathname}?${p}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(()=>setCopied(false),2000); });
   };
-
+  const tags = Array.isArray(cell.tags) ? cell.tags : [];
   return (
-    <Modal title={cell.name} onClose={onClose}>
-      {cell.imageUrl&&<img src={cell.imageUrl} alt={cell.name} style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:12,marginBottom:14,display:"block"}}/>}
-      {cell.description&&<p style={{color:T.muted,fontSize:13,marginBottom:20,lineHeight:1.7}}>{cell.description}</p>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-        <button onClick={shareUrl} style={btn("ghost",{fontSize:13})}>
-          {copied ? "✓ Copiat!" : "🔗 Compartir"}
-        </button>
-        <button onClick={onMove}   style={btn("ghost",{fontSize:13})}>↔ Moure</button>
-        <button onClick={onDelete} style={btn("red",{fontSize:13})}>🗑 Eliminar</button>
-      </div>
+    <Modal title={cell.name} onClose={onClose} maxW={440}>
+      {cell.imageUrl && <img src={cell.imageUrl} alt={cell.name}
+        style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:12,marginBottom:12,display:"block"}}/>}
+      {tags.length > 0 && (
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+          {tags.map((t,i) => (
+            <span key={i} style={{background:T.accentBg,color:T.accent,fontSize:11,
+              padding:"3px 9px",borderRadius:20,border:`1px solid ${T.accent}44`}}>{t}</span>
+          ))}
+        </div>
+      )}
+      {cell.description && <p style={{color:T.muted,fontSize:12,marginBottom:10,lineHeight:1.7,fontStyle:"italic"}}>{cell.description}</p>}
+      {confirmDel
+        ? <div style={{background:"rgba(238,85,85,0.08)",border:`1px solid ${T.danger}`,borderRadius:10,padding:"12px 14px"}}>
+            <p style={{color:T.danger,fontSize:13,marginBottom:10}}>Segur que vols eliminar "{cell.name}"?</p>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setConfirmDel(false)} style={btn("def",{flex:1})}>No</button>
+              <button onClick={onDelete} style={btn("red",{flex:1})}>Sí, eliminar</button>
+            </div>
+          </div>
+        : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+            <button onClick={shareUrl} style={btn("ghost",{fontSize:12,padding:"8px 4px"})}>
+              {copied ? "✓ Copiat" : "🔗 Compartir"}
+            </button>
+            <button onClick={onEdit} style={btn("ghost",{fontSize:12,padding:"8px 4px"})}>✎ Editar</button>
+            <button onClick={onMove} style={btn("ghost",{fontSize:12,padding:"8px 4px"})}>↔ Moure</button>
+            <button onClick={()=>setConfirmDel(true)} style={btn("red",{fontSize:12,padding:"8px 4px"})}>🗑</button>
+          </div>
+      }
     </Modal>
   );
 }
+
 
 // ============================================================
 // SEARCH MODAL — algo primer, IA opcional
@@ -1336,14 +1355,10 @@ function SearchModal({ onClose, getAllXapes, initQuery = "", initImage = null })
     (async () => {
       const fp = await computeFingerprint(initImage);
       setQueryFp(fp);
-      const pool = allXapes;
-      setAlgoResults(algoFindSimilar(fp, pool));
+      setAlgoResults(algoFindSimilar(fp, allXapes));
       setImgStep("idle");
     })();
   }, []);
-  const [aiResults, setAiResults]     = useState(null);
-  const [err, setErr]                 = useState("");
-  const fRef = useRef();
 
   const doTextSearch = q => {
     setQuery(q); setAlgoResults(null); setAiResults(null); setErr("");
