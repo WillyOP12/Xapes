@@ -549,6 +549,18 @@ function Modal({ title, onClose, children, maxW=440 }) {
 // ============================================================
 // APP ROOT
 // ============================================================
+
+// --- URL helpers ---
+function getParams() { return new URLSearchParams(window.location.search); }
+function pushUrl(params) {
+  const s = params.toString();
+  window.history.pushState({}, "", s ? `?${s}` : window.location.pathname);
+}
+function replaceUrl(params) {
+  const s = params.toString();
+  window.history.replaceState({}, "", s ? `?${s}` : window.location.pathname);
+}
+
 export default function App() {
   const [albums, setAlbums]       = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -561,13 +573,56 @@ export default function App() {
   const [busy, setBusy]           = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // --- Carrega inicial + restaura URL ---
   useEffect(() => {
     (async () => {
       const a = await S.get("xapes-albums");
-      setAlbums(Array.isArray(a) ? a : []);
+      const loadedAlbums = Array.isArray(a) ? a : [];
+      setAlbums(loadedAlbums);
       setLoading(false);
+      await restoreFromUrl(loadedAlbums);
     })();
   }, []);
+
+  const restoreFromUrl = async (loadedAlbums) => {
+    const p = getParams();
+    const albumId = p.get("album");
+    const fulla   = p.get("fulla");
+    const page    = p.get("page");
+    if (!albumId) return;
+    const found = (loadedAlbums || albums).find(a => a.id === albumId);
+    if (!found) return;
+    const raw = await S.get(`xapes-ad-${found.id}`);
+    const d = (raw && typeof raw === "object" && !Array.isArray(raw))
+      ? raw : { sheets: [], bigItems: [] };
+    if (!Array.isArray(d.sheets))   d.sheets   = [];
+    if (!Array.isArray(d.bigItems)) d.bigItems = [];
+    setAlbum(found); setData(d);
+    if (fulla !== null) {
+      const idx = Math.max(0, parseInt(fulla, 10) - 1) || 0;
+      setSheetIdx(idx); setView("sheet");
+    } else {
+      setView("album");
+    }
+    if (page === "cerca") setSearchOpen(true);
+  };
+
+  // --- Escolta el botó enrere del navegador ---
+  useEffect(() => {
+    const onPop = () => restoreFromUrl(albums);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [albums]);
+
+  // --- Sincronitza URL quan canvia l'estat ---
+  useEffect(() => {
+    if (loading) return;
+    const p = new URLSearchParams();
+    if (album)         p.set("album", album.id);
+    if (view === "sheet") p.set("fulla", String(sheetIdx + 1));
+    if (searchOpen)    p.set("page", "cerca");
+    replaceUrl(p);
+  }, [view, album, sheetIdx, searchOpen, loading]);
 
   const saveAlbums = async a => { setAlbums(a); await S.set("xapes-albums", a); };
   const saveData   = async (aid, d) => { setData(d); await S.set(`xapes-ad-${aid}`, d); };
@@ -575,22 +630,21 @@ export default function App() {
   const openAlbum = async a => {
     const raw = await S.get(`xapes-ad-${a.id}`);
     const d = (raw && typeof raw === "object" && !Array.isArray(raw))
-      ? raw
-      : { sheets: [], bigItems: [] };
+      ? raw : { sheets: [], bigItems: [] };
     if (!Array.isArray(d.sheets))   d.sheets   = [];
     if (!Array.isArray(d.bigItems)) d.bigItems = [];
     setAlbum(a); setData(d); setView("album");
   };
 
   const goBack = () => {
-    if (view==="sheet") { setView("album"); setMv(null); }
+    if (view === "sheet") { setView("album"); setMv(null); }
     else { setView("home"); setAlbum(null); setData(null); }
   };
 
   const curSheet  = () => data?.sheets?.[sheetIdx];
   const openSheet = i  => { setSheetIdx(i); setView("sheet"); };
-  const goPrev    = () => { const i=Math.max(0,sheetIdx-1); setSheetIdx(i); };
-  const goNext    = () => { const i=Math.min((data?.sheets?.length||1)-1,sheetIdx+1); setSheetIdx(i); };
+  const goPrev    = () => setSheetIdx(i => Math.max(0, i - 1));
+  const goNext    = () => setSheetIdx(i => Math.min((data?.sheets?.length || 1) - 1, i + 1));
 
   const handleCellClick = async idx => {
     const cs = curSheet(); if (!cs) return;
