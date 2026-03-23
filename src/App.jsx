@@ -373,7 +373,7 @@ function Cropper({ file, onDone, onCancel }) {
       {/* CONTENIDOR */}
       <div style={{position:"relative",userSelect:"none",borderRadius:8,overflow:"hidden",touchAction:"none"}}>
         <img ref={imgRef} src={imgSrc} alt="" draggable={false}
-          style={{width:"100%",display:"block",maxHeight:"60vh",objectFit:"contain"}} />
+          style={{width:"100%",height:"auto",display:"block"}} />
 
         {/* OVERLAY FOSC: 4 tires */}
         <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
