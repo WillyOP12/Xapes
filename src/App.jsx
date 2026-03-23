@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import './index.css';
 
-
 // ============================================================
 // CONSTANTS
 // ============================================================
@@ -89,7 +88,7 @@ async function describePin(imageUrl) {
     role: "user",
     content: [
       { type: "image_url", image_url: { url: imageUrl } },
-      { type: "text", text: "Descriu aquesta xapa segons el text, icones, o símbols, colors o altres. No cal la forma. No facis suposicions." },
+      { type: "text", text: "Descriu aquesta xapa/pin en 2 frases en català. Menciona la forma, els colors principals, qualsevol text o símbol, i l'estil." },
     ],
   }], 150);
 }
@@ -533,13 +532,17 @@ function CameraCapture({ onCapture, onCancel }) {
 // MODAL
 // ============================================================
 function Modal({ title, onClose, children, maxW=440 }) {
+  const isJSX = title && typeof title === "object";
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={{background:T.card,borderRadius:16,padding:24,width:"100%",maxWidth:maxW,maxHeight:"92vh",overflowY:"auto",border:`1px solid ${T.border}`}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <h3 style={{fontFamily:"Fraunces",fontSize:20,color:T.text}}>{title}</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",color:T.muted,fontSize:22,cursor:"pointer",lineHeight:1,padding:"0 2px"}}>×</button>
+          {isJSX
+            ? <>{title}<button onClick={onClose} style={{background:"none",border:"none",color:T.muted,fontSize:22,cursor:"pointer",lineHeight:1,padding:"0 2px",marginLeft:8}}>×</button></>
+            : <><h3 style={{fontFamily:"Fraunces",fontSize:20,color:T.text,flex:1}}>{title}</h3>
+                <button onClick={onClose} style={{background:"none",border:"none",color:T.muted,fontSize:22,cursor:"pointer",lineHeight:1,padding:"0 2px"}}>×</button></>
+          }
         </div>
         {children}
       </div>
@@ -855,9 +858,12 @@ export default function App() {
           }}/>
       )}
       {modal?.t==="view"&&(
-        <ViewXapaModal cell={modal.cell} onClose={()=>setModal(null)}
+        <ViewXapaModal cell={modal.cell} idx={modal.idx}
+          cells={curSheet()?.cells||[]}
+          onClose={()=>setModal(null)}
           onEdit={()=>setModal({t:"edit", cell:modal.cell, idx:modal.idx})}
           onMove={()=>{setMv({type:"cell",idx:modal.idx,item:modal.cell});setModal(null);}}
+          onNavigate={idx=>setModal({t:"view", cell:curSheet().cells[idx], idx})}
           onDelete={()=>{
             const nd={...data,sheets:data.sheets.map((s,si)=>si!==sheetIdx?s:(()=>{const c=[...s.cells];c[modal.idx]=null;return{...s,cells:c};})())};
             saveData(album.id,nd); setModal(null);
@@ -1282,9 +1288,27 @@ function AddXapaModal({ title, busy, setBusy, onClose, onSave,
 // ============================================================
 // VIEW XAPA MODAL
 // ============================================================
-function ViewXapaModal({ cell, onClose, onMove, onDelete, onEdit }) {
+function ViewXapaModal({ cell, idx, cells=[], onClose, onMove, onDelete, onEdit, onNavigate }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Índexs de les cel·les que tenen xapa (no buides)
+  const filledIdxs = cells.map((c,i)=>c?i:-1).filter(i=>i!==-1);
+  const pos     = filledIdxs.indexOf(idx);
+  const prevIdx = pos > 0                      ? filledIdxs[pos-1] : null;
+  const nextIdx = pos < filledIdxs.length - 1  ? filledIdxs[pos+1] : null;
+
+  // Navegació per teclat
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === "ArrowLeft"  && prevIdx !== null) onNavigate(prevIdx);
+      if (e.key === "ArrowRight" && nextIdx !== null) onNavigate(nextIdx);
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [prevIdx, nextIdx]);
+
   const shareUrl = () => {
     const p = new URLSearchParams(window.location.search);
     if (cell.id) p.set("xapa", cell.id);
@@ -1292,8 +1316,30 @@ function ViewXapaModal({ cell, onClose, onMove, onDelete, onEdit }) {
     navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(()=>setCopied(false),2000); });
   };
   const tags = Array.isArray(cell.tags) ? cell.tags : [];
+
+  const NavBtn = ({label, onClick, disabled}) => (
+    <button onClick={onClick} disabled={disabled}
+      style={{background:"none",border:`1px solid ${disabled?T.border:T.border}`,
+        color:disabled?T.muted:T.text,borderRadius:8,width:36,height:36,fontSize:18,
+        cursor:disabled?"default":"pointer",display:"flex",alignItems:"center",
+        justifyContent:"center",flexShrink:0,transition:"all .15s"}}
+      onMouseEnter={e=>{ if(!disabled) e.currentTarget.style.borderColor=T.accent; }}
+      onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+      {label}
+    </button>
+  );
+
   return (
-    <Modal title={cell.name} onClose={onClose} maxW={440}>
+    <Modal onClose={onClose} maxW={440}
+      title={
+        <div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}>
+          <NavBtn label="‹" onClick={()=>onNavigate(prevIdx)} disabled={prevIdx===null}/>
+          <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+            fontFamily:"Fraunces",fontSize:18}}>{cell.name}</span>
+          <span style={{color:T.muted,fontSize:12,flexShrink:0}}>{pos+1}/{filledIdxs.length}</span>
+          <NavBtn label="›" onClick={()=>onNavigate(nextIdx)} disabled={nextIdx===null}/>
+        </div>
+      }>
       {cell.imageUrl && <img src={cell.imageUrl} alt={cell.name}
         style={{width:"100%",aspectRatio:"1",objectFit:"cover",borderRadius:12,marginBottom:12,display:"block"}}/>}
       {tags.length > 0 && (
